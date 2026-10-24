@@ -87,6 +87,7 @@ struct Result {
   Counters c;
   std::vector<int> curve;
   int bestOpponent = 0;
+  double meanOpponent = 0;
 };
 
 class World {
@@ -202,7 +203,8 @@ private:
   void generate() {
     terrain.assign(N, EMPTY), res.assign(N, NONE), amount.assign(N, 0);
     std::vector<char> protect(N, 0);
-    int spacing = 12;
+    // Real matches place starting bases as close as 3 tiles apart.
+    int spacing = 4;
     for (int t = 0; t < static_cast<int>(teams.size()); ++t) {
       for (int attempt = 0;; ++attempt) {
         if (attempt > 0 && attempt % 3000 == 0)
@@ -245,9 +247,17 @@ private:
           x += ah::DX[k], y += ah::DY[k];
       }
     }
-    for (int i = 0; i < N; ++i)
-      if (!protect[i] && terrain[i] == EMPTY && unit01() < C.crater)
-        terrain[i] = CRATER;
+    // Craters come in 2x2 and 3x3 formations in real matches.
+    const int craters = static_cast<int>(C.crater * N);
+    for (int placed = 0, guard = 0; placed < craters && guard < N * 20; ++guard) {
+      const int size = rnd(2, 3), x0 = rnd(0, W - size), y0 = rnd(0, H - size);
+      for (int dy = 0; dy < size; ++dy)
+        for (int dx = 0; dx < size; ++dx) {
+          const int i = (y0 + dy) * W + x0 + dx;
+          if (!protect[i] && terrain[i] == EMPTY && placed < craters)
+            terrain[i] = CRATER, ++placed;
+        }
+    }
     const int gold = C.goldPerTeam * static_cast<int>(teams.size());
     const int centerGold = static_cast<int>(std::lround(C.centerPct * gold));
     for (int g = 0; g < gold; ++g)
@@ -828,10 +838,12 @@ private:
     };
     const Rank &us = ranks[0];
     int place = 1, bestOpponent = 0;
+    double opponentTotal = 0;
     for (const Rank &r : ranks)
       if (r.team != 0) {
         place += key(r) > key(us);
         bestOpponent = std::max(bestOpponent, r.gold);
+        opponentTotal += r.gold;
       }
     const Team &t = teams[0];
     Result out;
@@ -842,6 +854,7 @@ private:
     out.errors = t.brain->errors();
     out.msAvg = t.decisions ? t.msTotal / t.decisions : 0, out.msMax = t.msMax;
     out.c = t.c, out.curve = t.curve, out.bestOpponent = bestOpponent;
+    out.meanOpponent = ranks.size() > 1 ? opponentTotal / (ranks.size() - 1) : 0;
     return out;
   }
 };
@@ -914,7 +927,7 @@ int main(int argc, char **argv) {
   std::ofstream csv;
   if (!csvPath.empty()) {
     csv.open(csvPath);
-    csv << "variant,seed,gold,place,teams,best_opponent,iron,carried_gold,"
+    csv << "variant,seed,gold,place,teams,best_opponent,mean_opponent,iron,carried_gold,"
            "carried_iron,bases,workers,moves,mines,mine_fail,deposits,idle,"
            "cooldown,failed,spawns,builds,trades,errors,ms_avg,ms_max\n";
   }
@@ -925,14 +938,14 @@ int main(int argc, char **argv) {
             << std::setw(7) << "mean" << std::setw(7) << "sd" << std::setw(7)
             << "min" << std::setw(7) << "p10" << std::setw(7) << "med"
             << std::setw(7) << "max" << std::setw(7) << "win%" << std::setw(7)
-            << "place" << std::setw(7) << "opp" << std::setw(7) << "wrk"
+            << "place" << std::setw(7) << "opp" << std::setw(7) << "oppAvg" << std::setw(7) << "wrk"
             << std::setw(7) << "base" << std::setw(7) << "left" << std::setw(7)
             << "idle" << std::setw(7) << "fail" << std::setw(7) << "ms"
             << std::setw(7) << "msMax" << "\n";
   for (const std::string &variant : variants) {
     ah::Params params = ah::preset(variant);
     ah::apply_overrides(params, overrides);
-    std::vector<double> gold, place, opp, workers, basesBuilt, left, idle, fail,
+    std::vector<double> gold, place, opp, oppAvg, workers, basesBuilt, left, idle, fail,
         ms;
     double msMax = 0;
     int wins = 0;
@@ -940,7 +953,7 @@ int main(int argc, char **argv) {
     for (int seed = seedFrom; seed <= seedTo; ++seed) {
       World world(cfg, static_cast<std::uint64_t>(seed), variant, params, bots);
       const Result r = world.run();
-      gold.push_back(r.gold), place.push_back(r.place), opp.push_back(r.bestOpponent);
+      gold.push_back(r.gold), place.push_back(r.place), opp.push_back(r.bestOpponent), oppAvg.push_back(r.meanOpponent);
       workers.push_back(r.workers), basesBuilt.push_back(r.bases);
       left.push_back(r.carriedGold), idle.push_back(static_cast<double>(r.c.idle));
       fail.push_back(static_cast<double>(r.c.failed + r.c.mineFail));
@@ -952,7 +965,7 @@ int main(int argc, char **argv) {
         curve[k] += r.curve[k];
       if (csv)
         csv << variant << ',' << seed << ',' << r.gold << ',' << r.place << ','
-            << r.teams << ',' << r.bestOpponent << ',' << r.iron << ','
+            << r.teams << ',' << r.bestOpponent << ',' << r.meanOpponent << ',' << r.iron << ','
             << r.carriedGold << ',' << r.carriedIron << ',' << r.bases << ','
             << r.workers << ',' << r.c.move << ',' << r.c.mine << ','
             << r.c.mineFail << ',' << r.c.deposit << ',' << r.c.idle << ','
@@ -974,7 +987,7 @@ int main(int argc, char **argv) {
               << percentile(gold, 0) << std::setw(7) << percentile(gold, 0.1)
               << std::setw(7) << percentile(gold, 0.5) << std::setw(7)
               << percentile(gold, 1) << std::setw(7) << 100.0 * wins / n
-              << std::setw(7) << mean(place) << std::setw(7) << mean(opp)
+              << std::setw(7) << mean(place) << std::setw(7) << mean(opp) << std::setw(7) << mean(oppAvg)
               << std::setw(7) << mean(workers) << std::setw(7)
               << mean(basesBuilt) << std::setw(7) << mean(left) << std::setw(7)
               << mean(idle) << std::setw(7) << mean(fail) << std::setw(7)

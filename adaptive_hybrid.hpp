@@ -50,7 +50,7 @@ struct Params {
   bool bases = true;          // build bases by marginal value
   int maxBases = 6;
   bool explorePrior = true;   // center-weighted, staleness-aware exploration prior
-  bool goldToIron = false;    // trade carried gold for iron when iron is scarce
+  bool goldToIron = true;     // trade carried gold for iron when iron is scarce
   // Economics.
   double workerRate = 0.35;   // prior gold per worker-turn, blended with observation
   double rateFloor = 0.06;
@@ -61,11 +61,11 @@ struct Params {
   double spawnMargin = 1.0;   // recruit when value >= margin * cost * (1/3 gold per iron)
   double baseMinValue = 8;    // minimum net gold a base must add
   double baseClaimBonus = 0.3;
-  double ironValueCap = 3.0;  // ceiling on gold per kg of iron when mining it
-  double goldToIronMargin = 1.5;
+  double ironValueCap = 6.0;  // ceiling on gold per kg of iron when mining it
+  double goldToIronMargin = 1.0;  // trade 3 gold -> 1 iron when iron is worth >= 3x margin
   // Exploration.
   double exploreWeight = 0.25;
-  double depositLifetime = 80;  // turns for empty seen tiles to regain their prior
+  double depositLifetime = 150;  // turns for empty seen tiles to regain their prior
   double centerBoost = 1.0;
   double claimedExploreWeight = 0.15;
   // Movement and mining.

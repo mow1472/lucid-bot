@@ -48,7 +48,7 @@ cmake -S sim -B sim/build; cmake --build sim/build --config Release
 .\sim\build\bin\lpc-sim.exe --seeds 1:20 --variants baseline,early2,center,bases,full --opponents prospector:15 --csv out.csv
 ```
 
-Bot types are `greed` (Novice), `wander` (Beginner) and `prospector` (Intermediate). The simulator's map layout and practice bots are approximations, so use it to compare variants with each other, and confirm the winner with real practice matches.
+Bot types are `greed` (Novice), `wander` (Beginner) and `prospector` (Intermediate). For paired comparisons of parameter sets, run `python -I sim/sweep.py --configs configs.json --seeds 1:48`. The file maps each config name to its parameter overrides, and the first config is the reference. The simulator's map layout and practice bots are approximations, so use it to compare variants with each other, and confirm the winner with real practice matches.
 
 ### Results
 
@@ -62,7 +62,27 @@ Bot types are `greed` (Novice), `wander` (Beginner) and `prospector` (Intermedia
 | bases (+dynamic bases) | 476 | 62 | 366 | 100 | 3 | 5.7 |
 | full (+model-driven recruiting) | 551 | 80 | 418 | 90 | 4.2 | 5.5 |
 
-**Tuning:** I swept 16 settings on seeds 1–24, then checked the best ones on held-out seeds 25–48. With `exploreWeight 0.25` and `workerRate 0.35` (the current defaults), the held-out results were mean 609, SD 51, min 493, against 571 for the old defaults. Setting `exploreWeight` to 1.0 was clearly harmful (mean 322).
+**Tuning, round 1:** I swept 16 settings on seeds 1–24, then checked the best ones on held-out seeds 25–48. `exploreWeight 0.25` with `workerRate 0.35` scored mean 609, SD 51, min 493, against 571 for the old defaults. Setting `exploreWeight` to 1.0 was clearly harmful (mean 322).
+
+**Calibration:** I matched the simulator to the real replay:
+- starting bases as close as 3 tiles apart;
+- craters in 2×2 and 3×3 blocks;
+- about 26% obstacle tiles.
+
+The simulator now gives us about 25% more gold than the real match did. Simulated Intermediate bots have a similar best score but a lower average (98 vs 185).
+
+**Tuning, round 2:** I used `python -I sim/sweep.py`, which compares configs seed by seed. In this table, t is the difference divided by its standard error.
+
+| Change | Gold vs reference | t | Seeds |
+|---|---|---|---|
+| Stronger center bias (`centerBoost` 2) | −54 | −4.5 | 1–32 |
+| Shorter or longer deposit-memory decay (`staleTau` 30 or 120) | about −25 | about −2.2 | 1–32 |
+| Gold-for-iron trading plus `depositLifetime` 150 (now the default) | **+68** | **4.6** | held-out 49–96 |
+| `depositLifetime` 150 alone | +5 | 0.4 | 49–96 |
+
+The gold-for-iron trade is the important part. When the next investment values iron at 3 gold per kg or more, a worker at a base trades carried gold 3:1 for iron. That funds roughly one extra worker: 4.9 vs 3.9.
+
+The current defaults scored mean 611, min 410 and 100% wins on seeds 49–96, against mean 543 and min 368 for the round-1 defaults.
 
 **Real server:** one practice match, seed `ah-1`, 16 teams, against 15 Intermediate bots, using the earlier parameters. We placed **1st with 406 gold**. The Intermediate bots scored 109–290.
 
@@ -72,7 +92,7 @@ Bot types are `greed` (Novice), `wander` (Beginner) and `prospector` (Intermedia
   - The bot plays a full real match with no errors, about 10 ms per turn.
   - It won that one real match against Intermediate bots.
   - In the simulator, each variant beats the one before it, except that center vs early2 is within noise.
-- **Simulator only:** the parameter tuning and the size of each improvement. The simulated Intermediate bots score about 30% more than the real ones did.
+- **Simulator only:** the parameter tuning, the size of each improvement, and the gold-for-iron trade, which hasn't played a real match yet. Small simulator differences (|t| < 2) are noise.
 - **Heuristic:**
   - the recruit value curve (`saturation`), base valuation, the exploration prior and the deposit staleness model;
   - the rule of 3 gold deposits per team, used to estimate how much gold the map holds;
