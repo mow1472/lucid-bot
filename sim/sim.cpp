@@ -105,6 +105,13 @@ public:
       teams.emplace_back();
       teams.back().id = "bot-" + std::to_string(i + 1);
       teams.back().kind = bots[i];
+      // "ah" or "ah-<variant>" opponents are copies of our strategy with
+      // default parameters: a stand-in for strong competing teams.
+      if (bots[i].rfind("ah", 0) == 0) {
+        ah::Params q = ah::preset(bots[i].size() > 3 ? bots[i].substr(3) : "full");
+        q.persist = false, q.logEvery = 0;
+        teams.back().brain = std::make_unique<ah::Brain>(q);
+      }
     }
     for (std::size_t t = 0; t < teams.size(); ++t) {
       teams[t].rng.seed(static_cast<unsigned>(seed * 131 + t));

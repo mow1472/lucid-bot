@@ -63,6 +63,8 @@ struct Params {
   double baseClaimBonus = 0.3;
   double ironValueCap = 6.0;  // ceiling on gold per kg of iron when mining it
   double goldToIronMargin = 1.0;  // trade 3 gold -> 1 iron when iron is worth >= 3x margin
+  int ironLookahead = 1;      // investments ahead whose iron we gather or buy now
+  double baseValueScale = 1.0; // multiplier on base value (recruit vs base priority)
   // Exploration.
   double exploreWeight = 0.25;
   double depositLifetime = 150;  // turns for empty seen tiles to regain their prior
@@ -89,7 +91,8 @@ inline void apply_overrides(Params &p, const Json &j) {
   AH_FIELD(rateFloor) AH_FIELD(rateCap) AH_FIELD(rateWindow)
   AH_FIELD(saturation) AH_FIELD(spawnRamp) AH_FIELD(spawnMargin)
   AH_FIELD(baseMinValue) AH_FIELD(baseClaimBonus) AH_FIELD(ironValueCap)
-  AH_FIELD(goldToIronMargin) AH_FIELD(exploreWeight) AH_FIELD(depositLifetime)
+  AH_FIELD(goldToIronMargin) AH_FIELD(ironLookahead) AH_FIELD(baseValueScale)
+  AH_FIELD(exploreWeight) AH_FIELD(depositLifetime)
   AH_FIELD(centerBoost) AH_FIELD(claimedExploreWeight)
   AH_FIELD(unknownStepCost) AH_FIELD(staleTau) AH_FIELD(competition)
   AH_FIELD(stickiness) AH_FIELD(endgameSafety) AH_FIELD(investCutoff)
@@ -731,6 +734,14 @@ private:
         const double value = spawnValue(workers);
         if (value >= P.spawnMargin * cost / 3.0)
           list.push_back({false, value, cost, -1, -1});
+        // The recruit after next ranks below this one, so it only matters
+        // when gathering iron ahead (ironLookahead > 1).
+        const int cost2 = spawn_cost(recruited + 1);
+        const double value2 = spawnValue(workers + 1);
+        if (P.ironLookahead > 1 && value >= P.spawnMargin * cost / 3.0 &&
+            value2 >= P.spawnMargin * cost2 / 3.0 &&
+            (P.maxSpawns < 0 || recruited + 1 < P.maxSpawns))
+          list.push_back({false, value2, cost2, -1, -1});
       }
       if (P.bases && builder < 0 && R > P.investCutoff &&
           static_cast<int>(myBases_.size()) < P.maxBases) {
@@ -767,7 +778,7 @@ private:
           }
           if (who < 0 || R - travel <= P.investCutoff)
             continue;
-          const double net = baseValue(s) - rate_ * travel;
+          const double net = P.baseValueScale * baseValue(s) - rate_ * travel;
           if (net > best.value)
             best = {true, net, 6, s, who};
         }
@@ -842,7 +853,12 @@ private:
     if (!next.empty()) {
       ironHi_ = std::clamp(next.front().value / next.front().cost, 1.0 / 3,
                            P.ironValueCap);
-      ironShort_ = std::max(0, next.front().cost - budget - carriedIron);
+      int needed = 0;
+      for (int i = 0; i < std::min<int>(std::max(1, P.ironLookahead),
+                                        static_cast<int>(next.size()));
+           ++i)
+        needed += next[i].cost;
+      ironShort_ = std::max(0, needed - budget - carriedIron);
     }
     ironLo_ = R > 10 ? 1.0 / 3 : 0;
   }
