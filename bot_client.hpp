@@ -389,7 +389,10 @@ public:
           std::cerr << error.what() << '\n';
         }
       }
-      long long delay = 100;
+      // Team change: poll every 30 ms (starter: 100 ms). In multi-client-action
+      // scrimmages the turn advances as soon as every team has acted, and the
+      // 100 ms poll left us the slowest team with the most missed turns.
+      long long delay = 30;
       if (state.at("match").value("turnAdvanceMode", "") == "timed" &&
           state.contains("turnEndsAtMs") && !state["turnEndsAtMs"].is_null()) {
         const auto elapsed =

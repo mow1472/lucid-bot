@@ -70,6 +70,8 @@ struct Params {
   double depositLifetime = 150;  // turns for empty seen tiles to regain their prior
   double centerBoost = 1.0;
   double claimedExploreWeight = 0.15;
+  double baseReach = 0;        // turns to bank from gold we could build a base beside; 0 = off
+  double newBaseDiscount = 0.6; // share of that value kept (iron and setup time)
   // Movement and mining.
   double unknownStepCost = 1.5;
   double staleTau = 60;       // turns until a remembered deposit is ~37% likely intact
@@ -93,7 +95,8 @@ inline void apply_overrides(Params &p, const Json &j) {
   AH_FIELD(baseMinValue) AH_FIELD(baseClaimBonus) AH_FIELD(ironValueCap)
   AH_FIELD(goldToIronMargin) AH_FIELD(ironLookahead) AH_FIELD(baseValueScale)
   AH_FIELD(exploreWeight) AH_FIELD(depositLifetime)
-  AH_FIELD(centerBoost) AH_FIELD(claimedExploreWeight)
+  AH_FIELD(centerBoost) AH_FIELD(claimedExploreWeight) AH_FIELD(baseReach)
+  AH_FIELD(newBaseDiscount)
   AH_FIELD(unknownStepCost) AH_FIELD(staleTau) AH_FIELD(competition)
   AH_FIELD(stickiness) AH_FIELD(endgameSafety) AH_FIELD(investCutoff)
   AH_FIELD(persist) AH_FIELD(logEvery)
@@ -591,11 +594,20 @@ private:
                        : (1 - cPct_) * gold / outerArea * outerKg;
   }
 
+  // Share of a found kilogram we expect to bank after paying for the trips.
+  // Gold far from every base is not written off: we can build a base beside
+  // it, so its trips cost at most baseReach turns each way (discounted for
+  // the iron and time a new base takes).
   double bankingFactor(int i) const {
+    auto net = [&](double back) {
+      return std::clamp(1 - rate_ * (2.0 * back + 8) / 8, 0.05, 1.0);
+    };
     const int back = turns(bankDist_[i]);
-    if (back >= INF)
-      return 0.05;
-    return std::clamp(1 - rate_ * (2.0 * back + 8) / 8, 0.05, 1.0);
+    double factor = back >= INF ? 0.05 : net(back);
+    if (P.bases && P.baseReach > 0 &&
+        static_cast<int>(myBases_.size()) < P.maxBases)
+      factor = std::max(factor, P.newBaseDiscount * net(P.baseReach));
+    return factor;
   }
 
   void buildPrior() {
