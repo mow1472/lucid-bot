@@ -76,7 +76,9 @@ struct Params {
   double unknownStepCost = 1.5;
   double staleTau = 60;       // turns until a remembered deposit is ~37% likely intact
   double competition = 1.0;   // kg lost per visible enemy miner per turn of travel
-  double stickiness = 0.75;   // bonus for keeping last turn's target
+  double stickiness = 2.0;    // bonus for keeping last turn's target
+  double scenicBonus = 3;     // tenths of a turn per step taken off informative tiles; 0 = off
+  double scenicScale = 1.0;   // exploration value (kg) that earns the full bonus
   int endgameSafety = 1;      // spare turns kept before the deadline
   int investCutoff = 40;      // no investments with fewer turns left
   // Infrastructure.
@@ -98,7 +100,8 @@ inline void apply_overrides(Params &p, const Json &j) {
   AH_FIELD(centerBoost) AH_FIELD(claimedExploreWeight) AH_FIELD(baseReach)
   AH_FIELD(newBaseDiscount)
   AH_FIELD(unknownStepCost) AH_FIELD(staleTau) AH_FIELD(competition)
-  AH_FIELD(stickiness) AH_FIELD(endgameSafety) AH_FIELD(investCutoff)
+  AH_FIELD(stickiness) AH_FIELD(scenicBonus) AH_FIELD(scenicScale)
+  AH_FIELD(endgameSafety) AH_FIELD(investCutoff)
   AH_FIELD(persist) AH_FIELD(logEvery)
 #undef AH_FIELD
 }
@@ -184,6 +187,9 @@ public:
 
   double lastMs() const { return lastMs_; }
   int errors() const { return errors_; }
+  // Worker-turns by activity (explore, toMine, mine, home, bank, invest,
+  // idle, cooldown), for benchmarking where time goes.
+  const std::map<std::string, long> &turnUse() const { return use_; }
   const Params &params() const { return P; }
 
 private:
@@ -228,6 +234,7 @@ private:
   std::string match_, team_;
   int W_ = 0, H_ = 0, N_ = 0, turn_ = 0, maxTurns_ = 480, teams_ = 16;
   int lastTurn_ = -1, startWorkers_ = 1, obstacle_ = 3, errors_ = 0;
+  std::map<std::string, long> use_;
   int cx0_ = 17, cy0_ = 17, cw_ = 16, ch_ = 16;
   double cMin_ = 12, cMax_ = 18, cPct_ = 0.35;
   int bankGold_ = 0, bankIron_ = 0;
@@ -456,22 +463,30 @@ private:
   }
 
   // ------------------------------------------------------------ distances
+  // With `discount`, routes are chosen as if entering cell v cost
+  // discount[v] tenths less (never below 1), while `dist` still records the
+  // true travel cost of the chosen route.
   void dijkstra(const std::vector<std::pair<int, int>> &sources, bool reverse,
-                std::vector<int> &dist, std::vector<int> *parent) const {
+                std::vector<int> &dist, std::vector<int> *parent,
+                const std::vector<int> *discount = nullptr) const {
     dist.assign(N_, INF);
     if (parent)
       parent->assign(N_, -1);
+    std::vector<int> scenic;
+    if (discount)
+      scenic.assign(N_, INF);
+    std::vector<int> &metric = discount ? scenic : dist;
     using Entry = std::pair<int, int>;
     std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> queue;
     for (const auto &[cell, d0] : sources)
-      if (d0 < dist[cell]) {
-        dist[cell] = d0;
+      if (d0 < metric[cell]) {
+        metric[cell] = dist[cell] = d0;
         queue.push({d0, cell});
       }
     while (!queue.empty()) {
       const auto [d, u] = queue.top();
       queue.pop();
-      if (d != dist[u])
+      if (d != metric[u])
         continue;
       // Reverse fields price the step v -> u, so u must be enterable.
       if (reverse && cost_[u] >= INF)
@@ -485,9 +500,11 @@ private:
         const int step = reverse ? cost_[u] : cost_[v];
         if (step >= INF)
           continue;
-        const int nd = d + step;
-        if (nd < dist[v]) {
-          dist[v] = nd;
+        const int nd = d + (discount ? std::max(1, step - (*discount)[v]) : step);
+        if (nd < metric[v]) {
+          if (discount)
+            dist[v] = dist[u] + step;
+          metric[v] = nd;
           if (parent)
             (*parent)[v] = u;
           queue.push({nd, v});
@@ -835,6 +852,7 @@ private:
       if (spawner < 0)
         break;
       out[mine_[spawner].id] = {{"type", "spawn"}};
+      ++use_["invest"];
       wm_[mine_[spawner].id].task = Task::Spawn;
       assigned[spawner] = 1;
       budget -= o.cost;
@@ -847,6 +865,7 @@ private:
       Memory &m = wm_[u.id];
       m.task = Task::Build, m.target = site;
       assigned[builder] = 1;
+      ++use_["invest"];
       if (u.pos == site) {
         out[u.id] = {{"type", "build-base"}};
         pendingBuilds_.push_back({site, turn_});
@@ -940,6 +959,10 @@ private:
   void commit(int k, const Choice &c, Actions &out) {
     const Unit &u = mine_[k];
     Memory &m = wm_[u.id];
+    // A trip to a deposit dropped before arrival is wasted walking.
+    if (m.task == Task::Mine && m.target >= 0 && m.target != u.pos &&
+        !(c.task == Task::Mine && c.target == m.target))
+      ++use_[depAt_[m.target] < 0 ? "x-abandonGone" : "x-abandonSwitch"];
     m.task = c.task, m.target = c.target;
     const int R = remaining();
     Json action = {{"type", "pass"}};
@@ -995,6 +1018,12 @@ private:
       }
     }
     out[u.id] = action;
+    const std::string type = action.value("type", "pass");
+    ++use_[type == "pass"                 ? "idle"
+           : c.task == Task::Explore      ? "explore"
+           : c.task == Task::Home          ? (type == "move" ? "home" : "bank")
+           : type == "mine"               ? "mine"
+                                          : "toMine"];
   }
 
   void plan(Actions &out) {
@@ -1004,19 +1033,30 @@ private:
     dist_.assign(n, {});
     parent_.assign(n, {});
     std::vector<char> assigned(n, 0);
+    buildPrior();
+    // Scenic routing: among near-equal routes prefer ones that pass unseen or
+    // long-unseen tiles, so ordinary trips double as exploration.
+    std::vector<int> discount;
+    if (P.scenicBonus > 0) {
+      discount.assign(N_, 0);
+      for (int i = 0; i < N_; ++i)
+        discount[i] = static_cast<int>(std::lround(
+            P.scenicBonus * std::min(1.0, ei_[i] / std::max(1e-6, P.scenicScale))));
+    }
     for (int k = 0; k < n; ++k) {
       const Unit &u = mine_[k];
       wm_.try_emplace(u.id);
       if (u.ready > turn_) {
         out[u.id] = {{"type", "pass"}};
+        ++use_["cooldown"];
         assigned[k] = 1;
         dist_[k].assign(N_, INF);
         continue;
       }
-      dijkstra({{u.pos, 0}}, false, dist_[k], &parent_[k]);
+      dijkstra({{u.pos, 0}}, false, dist_[k], &parent_[k],
+               discount.empty() ? nullptr : &discount);
     }
     invest(out, assigned);
-    buildPrior();
 
     // Workers on cooldown keep their deposit and exploration reservations.
     for (int k = 0; k < n; ++k) {

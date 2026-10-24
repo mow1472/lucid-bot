@@ -88,6 +88,7 @@ struct Result {
   std::vector<int> curve;
   int bestOpponent = 0;
   double meanOpponent = 0;
+  std::map<std::string, long> use;
 };
 
 class World {
@@ -862,6 +863,7 @@ private:
     out.msAvg = t.decisions ? t.msTotal / t.decisions : 0, out.msMax = t.msMax;
     out.c = t.c, out.curve = t.curve, out.bestOpponent = bestOpponent;
     out.meanOpponent = ranks.size() > 1 ? opponentTotal / (ranks.size() - 1) : 0;
+    out.use = t.brain->turnUse();
     return out;
   }
 };
@@ -957,6 +959,7 @@ int main(int argc, char **argv) {
     double msMax = 0;
     int wins = 0;
     std::vector<double> curve;
+    std::map<std::string, long> use;
     for (int seed = seedFrom; seed <= seedTo; ++seed) {
       World world(cfg, static_cast<std::uint64_t>(seed), variant, params, bots);
       const Result r = world.run();
@@ -966,6 +969,8 @@ int main(int argc, char **argv) {
       fail.push_back(static_cast<double>(r.c.failed + r.c.mineFail));
       ms.push_back(r.msAvg), msMax = std::max(msMax, r.msMax);
       wins += r.place == 1;
+      for (const auto &[k, v] : r.use)
+        use[k] += v;
       if (curve.size() < r.curve.size())
         curve.resize(r.curve.size(), 0);
       for (std::size_t k = 0; k < r.curve.size(); ++k)
@@ -999,6 +1004,13 @@ int main(int argc, char **argv) {
               << mean(basesBuilt) << std::setw(7) << mean(left) << std::setw(7)
               << mean(idle) << std::setw(7) << mean(fail) << std::setw(7)
               << mean(ms) << std::setw(7) << msMax << "\n";
+    long used = 0;
+    for (const auto &[k, v] : use)
+      used += v;
+    std::cout << "          turn use %:";
+    for (const auto &[k, v] : use)
+      std::cout << ' ' << k << ' ' << 100.0 * v / std::max(1L, used);
+    std::cout << '\n';
     std::cout << "          gold by turn (0,40,..):";
     for (double c : curve)
       std::cout << ' ' << static_cast<int>(std::lround(c / n));
