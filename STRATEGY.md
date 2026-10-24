@@ -112,7 +112,7 @@ The current defaults came from the second scrimmage below rather than from simul
 | Stronger keep-target bonus (`stickiness` 2) alone | +3.1% ± 1.5 | +1.1% |
 | **Both (now the default)** | **+5.2% ± 1.6** | **+1.6%** |
 
-The combination gained +15, +9, +37 and +34 gold in the four fields; the largest gains came against copies of our own bot and in 10-team games. Scenic routing chooses, among near-equal routes, the one that passes unseen or long-unseen tiles, so ordinary trips reveal gold. Distances used for deadline checks still use the true route cost. The stronger keep-target bonus stops scenic detours from making workers change targets.
+The combination gained +15, +9, +37 and +34 gold in the four fields. Picking the best of five configs overstates its gain, so I re-tested it on held-out seeds 25–48: +34, −15, +17 and −10 (pooled +1.2% ± 1.7). Over all 48 seeds it averages about +3%, with its clearest gains against Intermediate bots and against copies of our own bot. It's roughly even in the mixed and 10-team fields. Scenic routing chooses, among near-equal routes, the one that passes unseen or long-unseen tiles, so ordinary trips reveal gold. Distances used for deadline checks still use the true route cost. The stronger keep-target bonus stops scenic detours from making workers change targets.
 
 **Where worker time goes** (simulator, 4 copies of our bot + 11 Intermediate, before round 4):
 
