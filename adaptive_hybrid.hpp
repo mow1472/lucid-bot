@@ -61,7 +61,7 @@ struct Params {
   double spawnMargin = 1.0;   // recruit when value >= margin * cost * (1/3 gold per iron)
   double baseMinValue = 8;    // minimum net gold a base must add
   double baseClaimBonus = 0.3;
-  double ironValueCap = 6.0;  // ceiling on gold per kg of iron when mining it
+  double ironValueCap = 3.0;  // ceiling on gold per kg of iron when mining it
   double goldToIronMargin = 1.0;  // trade 3 gold -> 1 iron when iron is worth >= 3x margin
   int ironLookahead = 1;      // investments ahead whose iron we gather or buy now
   double baseValueScale = 1.0; // multiplier on base value (recruit vs base priority)
@@ -70,7 +70,7 @@ struct Params {
   double depositLifetime = 150;  // turns for empty seen tiles to regain their prior
   double centerBoost = 1.0;
   double claimedExploreWeight = 0.15;
-  double baseReach = 0;        // turns to bank from gold we could build a base beside; 0 = off
+  double baseReach = 4;        // turns to bank from gold we could build a base beside; 0 = off
   double newBaseDiscount = 0.6; // share of that value kept (iron and setup time)
   // Movement and mining.
   double unknownStepCost = 1.5;
