@@ -1,18 +1,17 @@
 #include "bot_client.hpp"
-#include "game_helpers.hpp"
+#include "adaptive_hybrid.hpp"
 
 using namespace lpc;
 
+// One strategy instance for the process keeps map memory between turns.
+// AH_VARIANT and AH_PARAMS select and tune it (see adaptive_hybrid.hpp).
+static ah::Brain &brain() {
+  static ah::Brain instance(ah::load_params());
+  return instance;
+}
+
 Actions calculate_actions(const Json &state, const Json &identity) {
-  Actions actions;
-  for (const auto &worker : state.at("view").at("units")) {
-    if (worker.at("teamId") != identity.at("teamId"))
-      continue;
-    // Write your strategy here. Example: {{"type", "move"}, {"direction",
-    // "north"}}.
-    actions[worker.at("unitId").get<std::string>()] = {{"type", "pass"}};
-  }
-  return actions;
+  return brain().decide(state, identity.at("teamId").get<std::string>());
 }
 
 int main() {
