@@ -1,6 +1,6 @@
 # Lucid Programming Competition 2026 bot
 
-A C++20 bot for the Lucid Programming Competition (LPC) 2026, played as team **[BYU] Virginia**. In each match, 16 teams' bots share a 50×50 map and send one action per worker each turn. The team with the most gold banked after 480 turns wins.
+A C++20 bot for the Lucid Programming Competition (LPC) 2026, played as team **[BYU] Virginia**. In each match, 16 teams' bots share a 50×50 map and send one action per worker each turn. The team with the most gold banked after 480 turns wins. Each team had three hours to plan, build and test its bot.
 
 ![map of the game](image.png)
 
