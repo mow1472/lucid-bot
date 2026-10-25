@@ -11,10 +11,10 @@ A C++20 bot for the Lucid Programming Competition (LPC) 2026, played as team **[
 | Practice | 15 Intermediate bots | **1st** | 406 |
 | Ranked 1 | 15 teams + 1 bot | **1st** | 362 |
 | Ranked 2 | 14 teams + 1 bot | **2nd** | 453 (6 behind 1st) |
-| Ranked 3 | 16 teams | 5th | 366 |
-| Ranked 4 | 16 teams | 11th | 287 |
+| Semifinals | 16 teams | 5th | 366 |
+| Finals | 16 teams | 11th | 287 |
 
-We started strong, then slipped as other teams adapted between rounds. By the fourth round, several teams were claiming the rich center of the map with bases in the first 60 turns, which shut us out of the best gold.
+We started strong and made the finals, but slipped as other teams adapted between rounds. By the finals, several teams were claiming the rich center of the map with bases in the first 60 turns, which shut us out of the best gold.
 
 ## How it works
 
